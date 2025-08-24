@@ -125,10 +125,19 @@ pub fn addGraphFile(
     target: std.Build.ResolvedTarget,
 ) std.Build.LazyPath {
     const options = b.addOptions();
-    const writer = if (comptime builtin.zig_version.order(.{ .major = 0, .minor = 15, .patch = 0 }) == .lt)
+
+    const old_io = comptime builtin.zig_version.order(.{ .major = 0, .minor = 15, .patch = 0 }) == .lt;
+
+    const writer = if (old_io)
         options.contents.writer()
     else
         options.contents.writer(b.allocator);
+
+    const stdio_writer_function = if (old_io)
+        \\std.io.getStdOut().writer()
+    else
+        \\std.fs.File.stdout().writer()
+    ;
 
     writer.print(
         \\const std = @import("std");
@@ -139,7 +148,9 @@ pub fn addGraphFile(
         \\  const gpa = gpa_instance.allocator();
         \\  var graph = try ps.Graph.initWithFsm(gpa, Target.EnterFsmState);
         \\  defer graph.deinit();
-        \\  const writer = std.io.getStdOut().writer();
+        \\  const writer = 
+    ++ stdio_writer_function ++
+        \\;
         \\  try graph.{s}(writer);
         \\}}
     , .{ module_name, switch (graph_mode) {
