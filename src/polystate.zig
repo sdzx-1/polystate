@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const Graph = @import("Graph.zig");
 
@@ -131,8 +132,8 @@ pub fn Runner(
             @setEvalBranchQuota(10_000_000);
             sw: switch (curr_id) {
                 inline else => |state_id| {
-                    // Remove when https://github.com/ziglang/zig/issues/24323 is fixed:
-                    {
+                    if (comptime builtin.zig_version.order(.{ .major = 0, .minor = 15, .patch = 0 }) == .lt) {
+                        //  https://github.com/ziglang/zig/issues/24323
                         var runtime_false = false;
                         _ = &runtime_false;
                         if (runtime_false) continue :sw @enumFromInt(0);

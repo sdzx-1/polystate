@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -124,7 +125,11 @@ pub fn addGraphFile(
     target: std.Build.ResolvedTarget,
 ) std.Build.LazyPath {
     const options = b.addOptions();
-    const writer = options.contents.writer();
+    const writer = if (comptime builtin.zig_version.order(.{ .major = 0, .minor = 15, .patch = 0 }) == .lt)
+        options.contents.writer()
+    else
+        options.contents.writer(b.allocator);
+
     writer.print(
         \\const std = @import("std");
         \\const ps = @import("polystate");
