@@ -434,3 +434,76 @@ test "polystate not_suspendable" {
         try std.testing.expectEqual(max_a, ctx.b);
     }
 }
+
+test "polystate transition between state machines" {
+    const Context = struct {
+        value: i32,
+    };
+
+    const Tmp = struct {
+        pub fn First(Current: type) type {
+            return FSM("First", .not_suspendable, null, {}, Current);
+        }
+        
+        pub fn Second(Current: type) type {
+            return FSM("Second", .not_suspendable, null, {}, Current);
+        }
+
+        pub const StateA = union(enum) {
+            to_b: First(StateB),
+            to_c: Second(StateC),
+
+            pub fn handler(ctx: *Context) @This() {
+                if (ctx.value > 0) return .to_c;
+                return .to_b;
+            }
+        };
+
+        pub const StateB = union(enum) {
+            exit: First(Exit),
+
+            pub fn handler(ctx: *Context) @This() {
+                ctx.value = 100;
+                return .exit;
+            }
+        };
+
+        pub const StateC = union(enum) {
+            exit: Second(Exit),
+
+            pub fn handler(ctx: *Context) @This() {
+                ctx.value = 200;
+                return .exit;
+            }
+        };
+    };
+
+    const StartState = Tmp.First(Tmp.StateA);
+
+    const allocator = std.testing.allocator;
+    var graph = try Graph.initWithFsm(allocator, StartState);
+    defer graph.deinit();
+
+    const ExampleRunner = Runner(true, StartState);
+
+    try std.testing.expectEqual(
+        graph.nodes.items.len,
+        ExampleRunner.state_map.states.len,
+    );
+
+    // Test going to First FSM's StateB
+    {
+        var ctx: Context = .{ .value = 0 };
+        const curr_id: ExampleRunner.StateId = ExampleRunner.idFromState(Tmp.StateA);
+        ExampleRunner.runHandler(curr_id, &ctx);
+        try std.testing.expectEqual(@as(i32, 100), ctx.value);
+    }
+
+    // Test going to Second FSM's StateC
+    {
+        var ctx: Context = .{ .value = 1 };
+        const curr_id: ExampleRunner.StateId = ExampleRunner.idFromState(Tmp.StateA);
+        ExampleRunner.runHandler(curr_id, &ctx);
+        try std.testing.expectEqual(@as(i32, 200), ctx.value);
+    }
+}
