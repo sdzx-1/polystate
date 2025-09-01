@@ -80,7 +80,7 @@ pub const Context = struct {
 };
 
 pub fn CapsFsm(comptime method: ps.Method, comptime State: type) type {
-    return ps.FSM("Underscore Capitalizer", .suspendable, Context, null, method, State);
+    return ps.FSM("Underscore Capitalizer", .suspendable, null, method, State);
 }
 
 pub const EnterFsmState = CapsFsm(.current, FindWord);

@@ -22,15 +22,13 @@ pub const Method = enum {
 pub fn FSM(
     comptime name_: []const u8,
     comptime mode_: Mode,
-    comptime Context_: type,
-    comptime enter_fn_: ?fn (*Context_, type) void, // enter_fn args type is State
+    comptime enter_fn_: ?fn (anytype, type) void, // enter_fn args type is State, context type is derived from handler
     comptime transition_method_: if (mode_ == .not_suspendable) void else Method,
     comptime State_: type,
 ) type {
     return struct {
         pub const name = name_;
         pub const mode = mode_;
-        pub const Context = Context_;
         pub const enter_fn = enter_fn_;
         pub const transition_method: Method = if (mode_ == .not_suspendable) .current else transition_method_;
         pub const State = State_;
@@ -39,22 +37,24 @@ pub fn FSM(
 
 pub const StateMap = struct {
     states: []const type,
+    state_machine_names: []const []const u8,
     StateId: type,
 
     pub fn init(comptime FsmState: type) StateMap {
         @setEvalBranchQuota(200_000_000);
 
         comptime {
-            const states = reachableStates(FsmState);
+            const result = reachableStates(FsmState);
             return .{
-                .states = states,
+                .states = result.states,
+                .state_machine_names = result.state_machine_names,
                 .StateId = @Type(.{
                     .@"enum" = .{
-                        .tag_type = std.math.IntFittingRange(0, states.len - 1),
+                        .tag_type = std.math.IntFittingRange(0, result.states.len - 1),
                         .fields = inner: {
-                            var fields: [states.len]std.builtin.Type.EnumField = undefined;
+                            var fields: [result.states.len]std.builtin.Type.EnumField = undefined;
 
-                            for (&fields, states, 0..) |*field, State, state_int| {
+                            for (&fields, result.states, 0..) |*field, State, state_int| {
                                 field.* = .{
                                     .name = @typeName(State),
                                     .value = state_int,
@@ -111,7 +111,7 @@ pub fn Runner(
     comptime FsmState: type,
 ) type {
     return struct {
-        pub const Context = FsmState.Context;
+        pub const Context = ContextFromState(FsmState.State);
         pub const state_map: StateMap = .init(FsmState);
         pub const StateId = state_map.StateId;
         pub const RetType =
@@ -172,25 +172,29 @@ pub fn Runner(
     };
 }
 
-pub fn reachableStates(comptime FsmState: type) []const type {
+pub fn reachableStates(comptime FsmState: type) struct { states: []const type, state_machine_names: []const []const u8 } {
     comptime {
         var states: []const type = &.{FsmState.State};
+        var state_machine_names: []const []const u8 = &.{FsmState.name};
         var states_stack: []const type = &.{FsmState};
         var states_set: TypeSet(128) = .init;
+        const ExpectedContext = ContextFromState(FsmState.State);
 
         states_set.insert(FsmState.State);
 
-        reachableStatesDepthFirstSearch(FsmState, &states, &states_stack, &states_set);
+        reachableStatesDepthFirstSearch(FsmState, &states, &state_machine_names, &states_stack, &states_set, ExpectedContext);
 
-        return states;
+        return .{ .states = states, .state_machine_names = state_machine_names };
     }
 }
 
 fn reachableStatesDepthFirstSearch(
     comptime FsmState: type,
     comptime states: *[]const type,
+    comptime state_machine_names: *[]const []const u8,
     comptime states_stack: *[]const type,
     comptime states_set: *TypeSet(128),
+    comptime ExpectedContext: type,
 ) void {
     @setEvalBranchQuota(20_000_000);
 
@@ -204,13 +208,6 @@ fn reachableStatesDepthFirstSearch(
 
         const CurrentState = CurrentFsmState.State;
 
-        if (!std.mem.eql(u8, CurrentFsmState.name, FsmState.name)) {
-            @compileError(std.fmt.comptimePrint(
-                \\Inconsistent state machine names:
-                \\You used a state from state machine [{s}] in state machine [{s}].
-            , .{ CurrentFsmState.name, FsmState.name }));
-        }
-
         switch (@typeInfo(CurrentState)) {
             .@"union" => |un| {
                 for (un.fields) |field| {
@@ -222,11 +219,20 @@ fn reachableStatesDepthFirstSearch(
                     const NextState = NextFsmState.State;
 
                     if (!states_set.has(NextState)) {
+                        // Validate that the handler context type matches (skip for special states like Exit)
+                        if (NextState != Exit) {
+                            const NextContext = ContextFromState(NextState);
+                            if (NextContext != ExpectedContext) {
+                                @compileError(std.fmt.comptimePrint("Context type mismatch: State {s} has context type {s}, but expected {s}", .{ @typeName(NextState), @typeName(NextContext), @typeName(ExpectedContext) }));
+                            }
+                        }
+
                         states.* = states.* ++ &[_]type{NextState};
+                        state_machine_names.* = state_machine_names.* ++ &[_][]const u8{NextFsmState.name};
                         states_stack.* = states_stack.* ++ &[_]type{NextFsmState};
                         states_set.insert(NextState);
 
-                        reachableStatesDepthFirstSearch(FsmState, states, states_stack, states_set);
+                        reachableStatesDepthFirstSearch(FsmState, states, state_machine_names, states_stack, states_set, ExpectedContext);
                     }
                 }
             },
@@ -275,6 +281,26 @@ fn TypeSet(comptime bucket_count: usize) type {
     };
 }
 
+fn ContextFromState(comptime State: type) type {
+    if (!@hasDecl(State, "handler")) {
+        @compileError("State " ++ @typeName(State) ++ " must have a handler function");
+    }
+    const handler_type = @TypeOf(State.handler);
+    const handler_info = @typeInfo(handler_type);
+    if (handler_info != .@"fn") {
+        @compileError("State handler must be a function");
+    }
+    if (handler_info.@"fn".params.len != 1) {
+        @compileError("State handler must take exactly one parameter (context)");
+    }
+    const param_type = handler_info.@"fn".params[0].type.?;
+    const param_info = @typeInfo(param_type);
+    if (param_info != .pointer) {
+        @compileError("State handler parameter must be a pointer to context");
+    }
+    return param_info.pointer.child;
+}
+
 test "polystate suspendable" {
     const Context = struct {
         a: i32,
@@ -284,7 +310,7 @@ test "polystate suspendable" {
 
     const Tmp = struct {
         pub fn Example(meth: Method, Current: type) type {
-            return FSM("Example", .suspendable, Context, null, meth, Current);
+            return FSM("Example", .suspendable, null, meth, Current);
         }
 
         pub const A = union(enum) {
@@ -352,7 +378,7 @@ test "polystate not_suspendable" {
 
     const Tmp = struct {
         pub fn Example(Current: type) type {
-            return FSM("Example", .not_suspendable, Context, null, {}, Current);
+            return FSM("Example", .not_suspendable, null, {}, Current);
         }
 
         pub const A = union(enum) {
@@ -406,5 +432,78 @@ test "polystate not_suspendable" {
 
         try std.testing.expectEqual(max_a, ctx.a);
         try std.testing.expectEqual(max_a, ctx.b);
+    }
+}
+
+test "polystate transition between state machines" {
+    const Context = struct {
+        value: i32,
+    };
+
+    const Tmp = struct {
+        pub fn First(Current: type) type {
+            return FSM("First", .not_suspendable, null, {}, Current);
+        }
+        
+        pub fn Second(Current: type) type {
+            return FSM("Second", .not_suspendable, null, {}, Current);
+        }
+
+        pub const StateA = union(enum) {
+            to_b: First(StateB),
+            to_c: Second(StateC),
+
+            pub fn handler(ctx: *Context) @This() {
+                if (ctx.value > 0) return .to_c;
+                return .to_b;
+            }
+        };
+
+        pub const StateB = union(enum) {
+            exit: First(Exit),
+
+            pub fn handler(ctx: *Context) @This() {
+                ctx.value = 100;
+                return .exit;
+            }
+        };
+
+        pub const StateC = union(enum) {
+            exit: Second(Exit),
+
+            pub fn handler(ctx: *Context) @This() {
+                ctx.value = 200;
+                return .exit;
+            }
+        };
+    };
+
+    const StartState = Tmp.First(Tmp.StateA);
+
+    const allocator = std.testing.allocator;
+    var graph = try Graph.initWithFsm(allocator, StartState);
+    defer graph.deinit();
+
+    const ExampleRunner = Runner(true, StartState);
+
+    try std.testing.expectEqual(
+        graph.nodes.items.len,
+        ExampleRunner.state_map.states.len,
+    );
+
+    // Test going to First FSM's StateB
+    {
+        var ctx: Context = .{ .value = 0 };
+        const curr_id: ExampleRunner.StateId = ExampleRunner.idFromState(Tmp.StateA);
+        ExampleRunner.runHandler(curr_id, &ctx);
+        try std.testing.expectEqual(@as(i32, 100), ctx.value);
+    }
+
+    // Test going to Second FSM's StateC
+    {
+        var ctx: Context = .{ .value = 1 };
+        const curr_id: ExampleRunner.StateId = ExampleRunner.idFromState(Tmp.StateA);
+        ExampleRunner.runHandler(curr_id, &ctx);
+        try std.testing.expectEqual(@as(i32, 200), ctx.value);
     }
 }

@@ -14,6 +14,7 @@ const Graph = @This();
 pub const Node = struct {
     name: []const u8,
     id: u32,
+    fsm_name: []const u8,
 };
 
 pub const Edge = struct {
@@ -54,14 +55,55 @@ pub fn generateDot(
     );
 
     { //state graph
-        try writer.print(
-            \\  subgraph cluster_transitions {{
-            \\    label = "State transitions for {0s}";
+        try writer.writeAll(
+            \\  subgraph cluster_transitions {
+            \\    label = "State Transitions";
             \\    labelloc = "t";
             \\    labeljust = "c";
             \\
-        , .{self.name});
+        );
 
+        // Create subgraphs for each FSM's nodes
+        var cluster_idx: u32 = 0;
+        var current_fsm_name: ?[]const u8 = null;
+
+        for (self.nodes.items) |node| {
+            // Start new FSM subgraph if needed
+            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
+                // Close previous subgraph if any
+                if (current_fsm_name != null) {
+                    try writer.writeAll(
+                        \\    }
+                        \\
+                    );
+                    cluster_idx += 1;
+                }
+
+                // Start new subgraph
+                current_fsm_name = node.fsm_name;
+                try writer.print(
+                    \\    subgraph cluster_fsm_{d} {{
+                    \\      label = "{s}";
+                    \\
+                , .{ cluster_idx, node.fsm_name });
+            }
+
+            // Add node to current FSM subgraph
+            try writer.print(
+                \\      {d};
+                \\
+            , .{node.id});
+        }
+
+        // Close last subgraph
+        if (current_fsm_name != null) {
+            try writer.writeAll(
+                \\    }
+                \\
+            );
+        }
+
+        // Add edges
         for (self.edges.items) |edge| {
             try writer.print(
                 \\    {d} -> {d} [label = "{s}"{s}];
@@ -87,28 +129,58 @@ pub fn generateDot(
 
     { //all_state
 
-        try writer.print(
-            \\  subgraph cluster_names {{
-            \\    label = "State names for {0s}";
+        try writer.writeAll(
+            \\  subgraph cluster_names {
+            \\    label = "State Names";
             \\    labelloc = "t";
             \\    labeljust = "c";
-            \\    all_node [shape=plaintext, label=<
-            \\      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
             \\
-        ,
-            .{self.name},
         );
 
+        // Create a table for each FSM
+        var table_idx: u32 = 0;
+        var current_fsm_name: ?[]const u8 = null;
+
         for (self.nodes.items) |node| {
+            // Start new FSM table if needed
+            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
+                // Close previous table if any
+                if (current_fsm_name != null) {
+                    try writer.writeAll(
+                        \\      </TABLE>
+                        \\    >];
+                        \\
+                    );
+                    table_idx += 1;
+                }
+
+                // Start new table
+                current_fsm_name = node.fsm_name;
+                try writer.print(
+                    \\    table_{d} [shape=plaintext, label=<
+                    \\      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+                    \\      <TR><TD>{s}</TD></TR>
+                    \\
+                , .{ table_idx, node.fsm_name });
+            }
+
+            // Add node to current table
             try writer.print(
                 \\      <TR><TD ALIGN="LEFT"> {d} -- {s} </TD></TR>
                 \\
             , .{ node.id, node.name });
         }
 
+        // Close last table
+        if (current_fsm_name != null) {
+            try writer.writeAll(
+                \\      </TABLE>
+                \\    >];
+                \\
+            );
+        }
+
         try writer.writeAll(
-            \\      </TABLE>
-            \\    >]
             \\  }
             \\
         );
@@ -143,13 +215,54 @@ pub fn generateMermaid(
         \\
     );
 
+    // State transitions subgraph
     {
-        try writer.print(
-            \\  subgraph {s}_graph
+        try writer.writeAll(
+            \\  subgraph transitions["State Transitions"]
             \\    linkStyle default stroke-width:2px
             \\
-        , .{self.name});
+        );
 
+        // Create subgraphs for each FSM's nodes
+        var fsm_idx: u32 = 0;
+        var current_fsm_name: ?[]const u8 = null;
+
+        for (self.nodes.items) |node| {
+            // Start new FSM subgraph if needed
+            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
+                // Close previous subgraph if any
+                if (current_fsm_name != null) {
+                    try writer.writeAll(
+                        \\    end
+                        \\
+                    );
+                    fsm_idx += 1;
+                }
+
+                // Start new subgraph
+                current_fsm_name = node.fsm_name;
+                try writer.print(
+                    \\    subgraph fsm_{d}["{s}"]
+                    \\
+                , .{ fsm_idx, node.fsm_name });
+            }
+
+            // Add node to current FSM subgraph
+            try writer.print(
+                \\      {d}(({d}))
+                \\
+            , .{ node.id, node.id });
+        }
+
+        // Close last subgraph
+        if (current_fsm_name != null) {
+            try writer.writeAll(
+                \\    end
+                \\
+            );
+        }
+
+        // Add edges
         for (self.edges.items) |edge| {
             try writer.print(
                 \\    {d} -- "{s}" --> {d}
@@ -188,40 +301,68 @@ pub fn generateMermaid(
             );
         }
 
-        for (self.nodes.items) |node| {
-            try writer.print(
-                \\    {0d}@{{ shape: circle }}
-                \\
-            , .{node.id});
-        }
-
         try writer.writeAll(
             \\  end
             \\
         );
     }
 
+    // State names subgraph
     {
-        try writer.print(
-            \\  subgraph {s}_states
-            \\    s["
-            \\
-        , .{self.name});
-
-        for (self.nodes.items) |node| {
-            try writer.print(
-                \\    {d} -- {s}
-                \\
-            , .{ node.id, node.name });
-        }
         try writer.writeAll(
-            \\    "]
+            \\  subgraph names["State Names"]
             \\
         );
 
+        // Create a table for each FSM
+        var table_idx: u32 = 0;
+        var current_fsm_name: ?[]const u8 = null;
+
+        for (self.nodes.items) |node| {
+            // Start new FSM table if needed
+            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
+                // Close previous table if any
+                if (current_fsm_name != null) {
+                    try writer.writeAll(
+                        \\    "]
+                        \\
+                    );
+                    try writer.print(
+                        \\    table_{d}@{{ shape: text }}
+                        \\    table_{d}:::aligned
+                        \\
+                    , .{ table_idx, table_idx });
+                    table_idx += 1;
+                }
+
+                // Start new table
+                current_fsm_name = node.fsm_name;
+                try writer.print(
+                    \\    table_{d}["
+                    \\      {s}<br/>
+                , .{ table_idx, node.fsm_name });
+            }
+
+            // Add node to current table
+            try writer.print(
+                \\      {d} -- {s}<br/>
+            , .{ node.id, node.name });
+        }
+
+        // Close last table
+        if (current_fsm_name != null) {
+            try writer.writeAll(
+                \\    "]
+                \\
+            );
+            try writer.print(
+                \\    table_{d}@{{ shape: text }}
+                \\    table_{d}:::aligned
+                \\
+            , .{ table_idx, table_idx });
+        }
+
         try writer.writeAll(
-            \\    s@{ shape: text}
-            \\    s:::aligned
             \\    classDef aligned text-align: left, white-space: nowrap
             \\  end
         );
@@ -241,12 +382,11 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
 
     const state_map: ps.StateMap = comptime .init(FsmState);
 
-    comptime var state_map_iterator = state_map.iterator();
-    comptime var state_idx: u32 = 0;
-    inline while (state_map_iterator.next()) |State| : (state_idx += 1) {
+    inline for (state_map.states, state_map.state_machine_names, 0..) |State, fsm_name, state_idx| {
         try nodes.append(arena_allocator, .{
             .name = @typeName(State),
-            .id = state_idx,
+            .id = @intCast(state_idx),
+            .fsm_name = fsm_name,
         });
 
         switch (@typeInfo(State)) {
@@ -258,7 +398,7 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
                     const next_state_idx: u32 = @intFromEnum(state_map.idFromState(NextState));
 
                     try edges.append(arena_allocator, .{
-                        .from = state_idx,
+                        .from = @intCast(state_idx),
                         .to = next_state_idx,
                         .color = switch (NextFsmState.transition_method) {
                             .current => .black,
@@ -273,6 +413,15 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
     }
 
     try deduplicateNameSubstrings(arena_allocator, &nodes);
+
+    // Sort nodes by FSM name
+    std.mem.sort(Node, nodes.items, {}, struct {
+        pub fn lessThan(_: void, lhs: Node, rhs: Node) bool {
+            const cmp = std.mem.order(u8, lhs.fsm_name, rhs.fsm_name);
+            if (cmp != .eq) return cmp == .lt;
+            return lhs.id < rhs.id;
+        }
+    }.lessThan);
 
     return .{
         .arena = arena,
