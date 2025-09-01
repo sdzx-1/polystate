@@ -133,10 +133,13 @@ pub fn addGraphFile(
     else
         options.contents.writer(b.allocator);
 
-    const stdio_writer_function = if (old_io)
-        \\std.io.getStdOut().writer()
+    const stdio_writer_setup = if (old_io)
+        \\const writer = std.io.getStdOut().writer();
     else
-        \\std.fs.File.stdout().writer()
+        \\var stdout_buffer: [1024]u8 = undefined;
+        \\var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+        \\const writer = &stdout_writer.interface;
+        \\defer writer.flush() catch @panic("Failed to flush");
     ;
 
     writer.print(
@@ -148,9 +151,9 @@ pub fn addGraphFile(
         \\  const gpa = gpa_instance.allocator();
         \\  var graph = try ps.Graph.initWithFsm(gpa, Target.EnterFsmState);
         \\  defer graph.deinit();
-        \\  const writer = 
-    ++ stdio_writer_function ++
-        \\;
+        \\
+    ++ stdio_writer_setup ++
+        \\
         \\  try graph.{s}(writer);
         \\}}
     , .{ module_name, switch (graph_mode) {
