@@ -10,7 +10,7 @@ pub fn main() void {
 const Context = struct {};
 
 pub fn Example(Current: type) type {
-    return ps.FSM("Example", .not_suspendable, Context, null, {}, Current);
+    return ps.FSM("Example", .not_suspendable, null, {}, Current);
 }
 
 pub fn Dummy(comptime Next: type, comptime int: comptime_int) type {

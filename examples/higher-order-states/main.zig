@@ -277,7 +277,7 @@ pub const Context = struct {
 };
 
 pub fn CapsFsm(comptime State: type) type {
-    return ps.FSM("Word Processor", .not_suspendable, Context, null, {}, State);
+    return ps.FSM("Word Processor", .not_suspendable, null, {}, State);
 }
 
 const string1_states = struct {

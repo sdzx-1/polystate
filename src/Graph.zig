@@ -14,6 +14,7 @@ const Graph = @This();
 pub const Node = struct {
     name: []const u8,
     id: u32,
+    fsm_name: []const u8,
 };
 
 pub const Edge = struct {
@@ -54,14 +55,48 @@ pub fn generateDot(
     );
 
     { //state graph
-        try writer.print(
-            \\  subgraph cluster_transitions {{
-            \\    label = "State transitions for {0s}";
+        try writer.writeAll(
+            \\  subgraph cluster_transitions {
+            \\    label = "State Transitions";
             \\    labelloc = "t";
             \\    labeljust = "c";
             \\
-        , .{self.name});
+        );
 
+        // Create subgraphs for each FSM's nodes
+        var cluster_idx: u32 = 0;
+        var prev_fsm_name: []const u8 = "";
+        for (self.nodes.items) |node| {
+            const fsm_name = node.fsm_name;
+
+            // Skip if we've already processed this FSM
+            if (std.mem.eql(u8, prev_fsm_name, fsm_name)) continue;
+            prev_fsm_name = fsm_name;
+
+            try writer.print(
+                \\    subgraph cluster_fsm_{d} {{
+                \\      label = "{s}";
+                \\
+            , .{ cluster_idx, fsm_name });
+
+            // Add nodes belonging to this FSM
+            for (self.nodes.items) |node2| {
+                if (std.mem.eql(u8, node2.fsm_name, fsm_name)) {
+                    try writer.print(
+                        \\      {d};
+                        \\
+                    , .{node2.id});
+                }
+            }
+
+            try writer.writeAll(
+                \\    }
+                \\
+            );
+            cluster_idx += 1;
+        }
+
+        // Add edges
         for (self.edges.items) |edge| {
             try writer.print(
                 \\    {d} -> {d} [label = "{s}"{s}];
@@ -87,28 +122,49 @@ pub fn generateDot(
 
     { //all_state
 
-        try writer.print(
-            \\  subgraph cluster_names {{
-            \\    label = "State names for {0s}";
+        try writer.writeAll(
+            \\  subgraph cluster_names {
+            \\    label = "State Names";
             \\    labelloc = "t";
             \\    labeljust = "c";
-            \\    all_node [shape=plaintext, label=<
-            \\      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
             \\
-        ,
-            .{self.name},
         );
 
+        // Create a table for each FSM
+        var table_idx: u32 = 0;
+        var prev_fsm_name2: []const u8 = "";
         for (self.nodes.items) |node| {
+            const fsm_name = node.fsm_name;
+
+            // Skip if we've already processed this FSM
+            if (std.mem.eql(u8, prev_fsm_name2, fsm_name)) continue;
+            prev_fsm_name2 = fsm_name;
+
             try writer.print(
-                \\      <TR><TD ALIGN="LEFT"> {d} -- {s} </TD></TR>
+                \\    table_{d} [shape=plaintext, label=<
+                \\      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
+                \\      <TR><TD>{s}</TD></TR>
                 \\
-            , .{ node.id, node.name });
+            , .{ table_idx, fsm_name });
+
+            for (self.nodes.items) |node2| {
+                if (std.mem.eql(u8, node2.fsm_name, fsm_name)) {
+                    try writer.print(
+                        \\      <TR><TD ALIGN="LEFT"> {d} -- {s} </TD></TR>
+                        \\
+                    , .{ node2.id, node2.name });
+                }
+            }
+
+            try writer.writeAll(
+                \\      </TABLE>
+                \\    >];
+                \\
+            );
+            table_idx += 1;
         }
 
         try writer.writeAll(
-            \\      </TABLE>
-            \\    >]
             \\  }
             \\
         );
@@ -241,12 +297,11 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
 
     const state_map: ps.StateMap = comptime .init(FsmState);
 
-    comptime var state_map_iterator = state_map.iterator();
-    comptime var state_idx: u32 = 0;
-    inline while (state_map_iterator.next()) |State| : (state_idx += 1) {
+    inline for (state_map.states, state_map.state_machine_names, 0..) |State, fsm_name, state_idx| {
         try nodes.append(arena_allocator, .{
             .name = @typeName(State),
-            .id = state_idx,
+            .id = @intCast(state_idx),
+            .fsm_name = fsm_name,
         });
 
         switch (@typeInfo(State)) {
@@ -258,7 +313,7 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
                     const next_state_idx: u32 = @intFromEnum(state_map.idFromState(NextState));
 
                     try edges.append(arena_allocator, .{
-                        .from = state_idx,
+                        .from = @intCast(state_idx),
                         .to = next_state_idx,
                         .color = switch (NextFsmState.transition_method) {
                             .current => .black,
