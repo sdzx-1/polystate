@@ -199,13 +199,47 @@ pub fn generateMermaid(
         \\
     );
 
+    // State transitions subgraph
     {
-        try writer.print(
-            \\  subgraph {s}_graph
+        try writer.writeAll(
+            \\  subgraph transitions["State Transitions"]
             \\    linkStyle default stroke-width:2px
             \\
-        , .{self.name});
+        );
 
+        // Create subgraphs for each FSM's nodes
+        var fsm_idx: u32 = 0;
+        var prev_fsm_name: []const u8 = "";
+        for (self.nodes.items) |node| {
+            const fsm_name = node.fsm_name;
+
+            // Skip if we've already processed this FSM
+            if (std.mem.eql(u8, prev_fsm_name, fsm_name)) continue;
+            prev_fsm_name = fsm_name;
+
+            try writer.print(
+                \\    subgraph fsm_{d}["{s}"]
+                \\
+            , .{ fsm_idx, fsm_name });
+
+            // Add nodes belonging to this FSM
+            for (self.nodes.items) |node2| {
+                if (std.mem.eql(u8, node2.fsm_name, fsm_name)) {
+                    try writer.print(
+                        \\      {d}(({d}))
+                        \\
+                    , .{ node2.id, node2.id });
+                }
+            }
+
+            try writer.writeAll(
+                \\    end
+                \\
+            );
+            fsm_idx += 1;
+        }
+
+        // Add edges
         for (self.edges.items) |edge| {
             try writer.print(
                 \\    {d} -- "{s}" --> {d}
@@ -244,40 +278,57 @@ pub fn generateMermaid(
             );
         }
 
-        for (self.nodes.items) |node| {
-            try writer.print(
-                \\    {0d}@{{ shape: circle }}
-                \\
-            , .{node.id});
-        }
-
         try writer.writeAll(
             \\  end
             \\
         );
     }
 
+    // State names subgraph
     {
-        try writer.print(
-            \\  subgraph {s}_states
-            \\    s["
-            \\
-        , .{self.name});
-
-        for (self.nodes.items) |node| {
-            try writer.print(
-                \\    {d} -- {s}
-                \\
-            , .{ node.id, node.name });
-        }
         try writer.writeAll(
-            \\    "]
+            \\  subgraph names["State Names"]
             \\
         );
 
+        // Create a table for each FSM
+        var table_idx: u32 = 0;
+        var prev_fsm_name2: []const u8 = "";
+        for (self.nodes.items) |node| {
+            const fsm_name = node.fsm_name;
+
+            // Skip if we've already processed this FSM
+            if (std.mem.eql(u8, prev_fsm_name2, fsm_name)) continue;
+            prev_fsm_name2 = fsm_name;
+
+            try writer.print(
+                \\    table_{d}["
+                \\      {s}<br/>
+            , .{ table_idx, fsm_name });
+
+            for (self.nodes.items) |node2| {
+                if (std.mem.eql(u8, node2.fsm_name, fsm_name)) {
+                    try writer.print(
+                        \\      {d} -- {s}<br/>
+                    , .{ node2.id, node2.name });
+                }
+            }
+
+            try writer.writeAll(
+                \\    "]
+                \\
+            );
+
+            try writer.print(
+                \\    table_{d}@{{ shape: text }}
+                \\    table_{d}:::aligned
+                \\
+            , .{ table_idx, table_idx });
+
+            table_idx += 1;
+        }
+
         try writer.writeAll(
-            \\    s@{ shape: text}
-            \\    s:::aligned
             \\    classDef aligned text-align: left, white-space: nowrap
             \\  end
         );
