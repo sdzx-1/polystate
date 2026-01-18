@@ -23,11 +23,13 @@ pub const Method = enum {
     current,
 };
 
-//   Data                     StateInfo
-// method, State      StateMachineName, Context, State name
+//   Data                        StateInfo
+// method, State, data     StateMachineName, Context, State name
 
-pub fn Data(method_: Method, NewState_: type) type {
+pub fn Data(method_: Method, Data_: type, NewState_: type) type {
     return struct {
+        data: Data_,
+
         pub const method = method_;
         pub const State = NewState_;
     };
@@ -275,6 +277,11 @@ pub fn Runner(
                         CurrState.handler,
                         .{ctx},
                     );
+
+                    if (@hasDecl(CurrState, "prehandler")) {
+                        CurrState.prehandler(ctx, handle_res);
+                    }
+
                     switch (handle_res) {
                         inline else => |new_fsm_state_wit| {
                             const NewData = @TypeOf(new_fsm_state_wit);
@@ -307,9 +314,9 @@ test "polystate suspendable" {
 
         pub const A = union(enum) {
             // zig fmt: off
-            exit : Data(.next, Exit),
-            to_B : Data(.next, B),
-            to_B1: Data(.current, B),
+            exit : Data(.next, void, Exit),
+            to_B : Data(.next, void, B),
+            to_B1: Data(.current, void, B),
             // zig fmt: on
 
             pub const info = example_info("A");
@@ -323,7 +330,7 @@ test "polystate suspendable" {
         };
 
         pub const B = union(enum) {
-            to_A: Data(.next, A),
+            to_A: Data(.next, void, A),
 
             pub const info = example_info("B");
 
@@ -367,9 +374,9 @@ test "polystate not_suspendable" {
 
         pub const A = union(enum) {
             // zig fmt: off
-            exit : Data(.current, Exit),
-            to_B : Data(.current, B),
-            to_B1: Data(.current, B),
+            exit : Data(.current, void, Exit),
+            to_B : Data(.current, void, B),
+            to_B1: Data(.current, void, B),
             // zig fmt: on
 
             pub const info = example_info("A");
@@ -383,7 +390,7 @@ test "polystate not_suspendable" {
         };
 
         pub const B = union(enum) {
-            to_A: Data(.current, A),
+            to_A: Data(.current, void, A),
 
             pub const info = example_info("B");
 
