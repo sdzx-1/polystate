@@ -42,7 +42,12 @@ pub fn generateJson(self: @This(), writer: anytype) !void {
         .edges = self.edges.items,
     };
 
-    try std.json.stringify(save, .{ .whitespace = .indent_2 }, writer);
+    var write_stream: std.json.Stringify = .{
+        .writer = writer,
+        .options = .{ .whitespace = .indent_2 },
+    };
+
+    try write_stream.write(save);
 }
 
 pub fn generateDot(
