@@ -90,9 +90,9 @@ pub fn generateDot(
 
             // Add node to current FSM subgraph
             try writer.print(
-                \\      {d};
+                \\      {d} [label = "[{d}] {s}"];
                 \\
-            , .{node.id});
+            , .{ node.id, node.id, node.name });
         }
 
         // Close last subgraph
@@ -119,65 +119,6 @@ pub fn generateDot(
                     ,
                 },
             });
-        }
-
-        try writer.writeAll(
-            \\  }
-            \\
-        );
-    }
-
-    { //all_state
-
-        try writer.writeAll(
-            \\  subgraph cluster_names {
-            \\    label = "State Names";
-            \\    labelloc = "t";
-            \\    labeljust = "c";
-            \\
-        );
-
-        // Create a table for each FSM
-        var table_idx: u32 = 0;
-        var current_fsm_name: ?[]const u8 = null;
-
-        for (self.nodes.items) |node| {
-            // Start new FSM table if needed
-            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
-                // Close previous table if any
-                if (current_fsm_name != null) {
-                    try writer.writeAll(
-                        \\      </TABLE>
-                        \\    >];
-                        \\
-                    );
-                    table_idx += 1;
-                }
-
-                // Start new table
-                current_fsm_name = node.fsm_name;
-                try writer.print(
-                    \\    table_{d} [shape=plaintext, label=<
-                    \\      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">
-                    \\      <TR><TD>{s}</TD></TR>
-                    \\
-                , .{ table_idx, node.fsm_name });
-            }
-
-            // Add node to current table
-            try writer.print(
-                \\      <TR><TD ALIGN="LEFT"> {d} -- {s} </TD></TR>
-                \\
-            , .{ node.id, node.name });
-        }
-
-        // Close last table
-        if (current_fsm_name != null) {
-            try writer.writeAll(
-                \\      </TABLE>
-                \\    >];
-                \\
-            );
         }
 
         try writer.writeAll(
@@ -249,9 +190,9 @@ pub fn generateMermaid(
 
             // Add node to current FSM subgraph
             try writer.print(
-                \\      {d}(({d}))
+                \\      {d}(({s}))
                 \\
-            , .{ node.id, node.id });
+            , .{ node.id, node.name });
         }
 
         // Close last subgraph
@@ -306,67 +247,6 @@ pub fn generateMermaid(
             \\
         );
     }
-
-    // State names subgraph
-    {
-        try writer.writeAll(
-            \\  subgraph names["State Names"]
-            \\
-        );
-
-        // Create a table for each FSM
-        var table_idx: u32 = 0;
-        var current_fsm_name: ?[]const u8 = null;
-
-        for (self.nodes.items) |node| {
-            // Start new FSM table if needed
-            if (current_fsm_name == null or !std.mem.eql(u8, current_fsm_name.?, node.fsm_name)) {
-                // Close previous table if any
-                if (current_fsm_name != null) {
-                    try writer.writeAll(
-                        \\    "]
-                        \\
-                    );
-                    try writer.print(
-                        \\    table_{d}@{{ shape: text }}
-                        \\    table_{d}:::aligned
-                        \\
-                    , .{ table_idx, table_idx });
-                    table_idx += 1;
-                }
-
-                // Start new table
-                current_fsm_name = node.fsm_name;
-                try writer.print(
-                    \\    table_{d}["
-                    \\      {s}<br/>
-                , .{ table_idx, node.fsm_name });
-            }
-
-            // Add node to current table
-            try writer.print(
-                \\      {d} -- {s}<br/>
-            , .{ node.id, node.name });
-        }
-
-        // Close last table
-        if (current_fsm_name != null) {
-            try writer.writeAll(
-                \\    "]
-                \\
-            );
-            try writer.print(
-                \\    table_{d}@{{ shape: text }}
-                \\    table_{d}:::aligned
-                \\
-            , .{ table_idx, table_idx });
-        }
-
-        try writer.writeAll(
-            \\    classDef aligned text-align: left, white-space: nowrap
-            \\  end
-        );
-    }
 }
 
 pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph {
@@ -384,7 +264,7 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
 
     inline for (state_map.states, state_map.state_machine_names, 0..) |State, fsm_name, state_idx| {
         try nodes.append(arena_allocator, .{
-            .name = @typeName(State),
+            .name = State.info.name,
             .id = @intCast(state_idx),
             .fsm_name = fsm_name,
         });
@@ -392,15 +272,15 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
         switch (@typeInfo(State)) {
             .@"union" => |un| {
                 inline for (un.fields) |field| {
-                    const NextFsmState = field.type;
-                    const NextState = NextFsmState.State;
+                    const NextData = field.type;
+                    const NextState = NextData.State;
 
                     const next_state_idx: u32 = @intFromEnum(state_map.idFromState(NextState));
 
                     try edges.append(arena_allocator, .{
                         .from = @intCast(state_idx),
                         .to = next_state_idx,
-                        .color = switch (NextFsmState.transition_method) {
+                        .color = switch (NextData.method) {
                             .current => .black,
                             .next => .blue,
                         },
@@ -411,8 +291,6 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
             else => @compileError("Only support tagged union!"),
         }
     }
-
-    try deduplicateNameSubstrings(arena_allocator, &nodes);
 
     // Sort nodes by FSM name
     std.mem.sort(Node, nodes.items, {}, struct {
@@ -426,45 +304,9 @@ pub fn initWithFsm(allocator: std.mem.Allocator, comptime FsmState: type) !Graph
     return .{
         .arena = arena,
         .edges = edges,
-        .name = FsmState.name,
+        .name = @TypeOf(FsmState.info).StateMachineName,
         .nodes = nodes,
     };
-}
-
-// Somewhat inefficient, consider optimizing later.
-fn deduplicateNameSubstrings(arena_allocator: std.mem.Allocator, nodes: *std.ArrayListUnmanaged(Node)) !void {
-    var new_nodes: std.ArrayListUnmanaged(Node) = try .initCapacity(arena_allocator, nodes.items.len);
-    new_nodes.expandToCapacity();
-
-    std.mem.sort(Node, nodes.items, {}, struct {
-        pub fn lessThan(_: void, lhs: Node, rhs: Node) bool {
-            return lhs.name.len > rhs.name.len;
-        }
-    }.lessThan);
-
-    for (nodes.items, new_nodes.items) |node, *new_node| {
-        new_node.* = node;
-
-        for (nodes.items) |other_node| {
-            if (node.id != other_node.id) {
-                new_node.name = try std.mem.replaceOwned(
-                    u8,
-                    arena_allocator,
-                    new_node.name,
-                    other_node.name,
-                    try std.fmt.allocPrint(arena_allocator, "{{{}}}", .{other_node.id}),
-                );
-            }
-        }
-    }
-
-    nodes.* = new_nodes;
-
-    std.mem.sort(Node, nodes.items, {}, struct {
-        pub fn lessThan(_: void, lhs: Node, rhs: Node) bool {
-            return lhs.id < rhs.id;
-        }
-    }.lessThan);
 }
 
 pub fn deinit(self: *Graph) void {

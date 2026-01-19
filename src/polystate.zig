@@ -8,6 +8,8 @@ pub const Exit = union(enum) {
     pub const info: Info = .{};
 
     pub const Info = struct {
+        name: []const u8 = "Exit",
+
         pub const StateMachineName = "polystate_exit";
         pub const Context = void;
     };
