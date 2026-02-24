@@ -28,10 +28,8 @@ pub const Method = enum {
 //   Data                        StateInfo
 // method, State, data     StateMachineName, Context, State name
 
-pub fn Data(method_: Method, Data_: type, NewState_: type) type {
+pub fn Data(method_: Method, NewState_: type) type {
     return struct {
-        data: Data_,
-
         pub const method = method_;
         pub const State = NewState_;
     };
@@ -316,9 +314,9 @@ test "polystate suspendable" {
 
         pub const A = union(enum) {
             // zig fmt: off
-            exit : Data(.next, void, Exit),
-            to_B : Data(.next, void, B),
-            to_B1: Data(.current, void, B),
+            exit : Data(.next, Exit),
+            to_B : Data(.next, B),
+            to_B1: Data(.current, B),
             // zig fmt: on
 
             pub const info = example_info("A");
@@ -332,7 +330,7 @@ test "polystate suspendable" {
         };
 
         pub const B = union(enum) {
-            to_A: Data(.next, void, A),
+            to_A: Data(.next, A),
 
             pub const info = example_info("B");
 
@@ -376,9 +374,9 @@ test "polystate not_suspendable" {
 
         pub const A = union(enum) {
             // zig fmt: off
-            exit : Data(.current, void, Exit),
-            to_B : Data(.current, void, B),
-            to_B1: Data(.current, void, B),
+            exit : Data(.current, Exit),
+            to_B : Data(.current, B),
+            to_B1: Data(.current, B),
             // zig fmt: on
 
             pub const info = example_info("A");
@@ -392,7 +390,7 @@ test "polystate not_suspendable" {
         };
 
         pub const B = union(enum) {
-            to_A: Data(.current, void, A),
+            to_A: Data(.current, A),
 
             pub const info = example_info("B");
 

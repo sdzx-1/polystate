@@ -16,7 +16,7 @@ pub fn Words(
             comptime NoWordsLeft: type,
         ) type {
             return union(enum) {
-                to_inner: Data(.current, void, IterateWordsInner(WordOperation(@This()), NoWordsLeft)),
+                to_inner: Data(.current, IterateWordsInner(WordOperation(@This()), NoWordsLeft)),
 
                 pub const info = word_processor_info("IterateWords");
 
@@ -33,8 +33,8 @@ pub fn Words(
             comptime NoWordsLeft: type,
         ) type {
             return union(enum) {
-                to_find_word: Data(.current, void, FindWord(FoundWord)),
-                to_no_words_left: Data(.current, void, NoWordsLeft),
+                to_find_word: Data(.current, FindWord(FoundWord)),
+                to_no_words_left: Data(.current, NoWordsLeft),
 
                 pub const info = word_processor_info("IterateWordsInner");
 
@@ -51,8 +51,8 @@ pub fn Words(
 
         pub fn FindWord(comptime Next: type) type {
             return union(enum) {
-                to_find_word_end: Data(.current, void, FindWordEnd(Next)),
-                no_transition: Data(.current, void, @This()),
+                to_find_word_end: Data(.current, FindWordEnd(Next)),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("FindWord");
 
@@ -80,8 +80,8 @@ pub fn Words(
 
         pub fn FindWordEnd(comptime Next: type) type {
             return union(enum) {
-                to_next: Data(.current, void, Next),
-                no_transition: Data(.current, void, @This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("FindWordEnd");
 
@@ -106,7 +106,7 @@ pub fn Words(
             mutateChar: fn (char: u8) u8,
         ) type {
             return union(enum) {
-                to_inner: Data(.current, void, CharMutationInner(Next, mutateChar)),
+                to_inner: Data(.current, CharMutationInner(Next, mutateChar)),
 
                 pub const info = word_processor_info("CharMutation");
 
@@ -123,8 +123,8 @@ pub fn Words(
             mutateChar: fn (char: u8) u8,
         ) type {
             return union(enum) {
-                to_next: Data(.current, void, Next),
-                no_transition: Data(.current, void, @This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("CharMutationInner");
 
@@ -143,7 +143,7 @@ pub fn Words(
 
         pub fn Reverse(comptime Next: type) type {
             return union(enum) {
-                to_inner: Data(.current, void, ReverseInner(Next)),
+                to_inner: Data(.current, ReverseInner(Next)),
 
                 pub const info = word_processor_info("Reverse");
 
@@ -158,8 +158,8 @@ pub fn Words(
 
         pub fn ReverseInner(comptime Next: type) type {
             return union(enum) {
-                to_next: Data(.current, void, Next),
-                no_transition: Data(.current, void, @This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("ReverseInner");
 
@@ -185,7 +185,7 @@ pub fn Words(
             comptime predicate: fn (char: u8) bool,
         ) type {
             return union(enum) {
-                to_inner: Data(.current, void, CharFilterInner(Pass, Fail, predicate)),
+                to_inner: Data(.current, CharFilterInner(Pass, Fail, predicate)),
 
                 pub const info = word_processor_info("CharFilter");
 
@@ -203,9 +203,9 @@ pub fn Words(
             comptime predicate: fn (char: u8) bool,
         ) type {
             return union(enum) {
-                to_pass: Data(.current, void, Pass),
-                to_fail: Data(.current, void, Fail),
-                no_transition: Data(.current, void, @This()),
+                to_pass: Data(.current, Pass),
+                to_fail: Data(.current, Fail),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("CharFilterInner");
 
@@ -229,7 +229,7 @@ pub fn Words(
             comptime Fail: type,
         ) type {
             return union(enum) {
-                to_inner: Data(.current, void, PalindromeFilterInner(Pass, Fail)),
+                to_inner: Data(.current, PalindromeFilterInner(Pass, Fail)),
 
                 pub const info = word_processor_info("PalindromeFilter");
 
@@ -247,9 +247,9 @@ pub fn Words(
             comptime Fail: type,
         ) type {
             return union(enum) {
-                to_pass: Data(.current, void, Pass),
-                to_fail: Data(.current, void, Fail),
-                no_transition: Data(.current, void, @This()),
+                to_pass: Data(.current, Pass),
+                to_fail: Data(.current, Fail),
+                no_transition: Data(.current, @This()),
 
                 pub const info = word_processor_info("PalindromeFilterInner");
 

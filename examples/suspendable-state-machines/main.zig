@@ -3,9 +3,9 @@ const ps = @import("polystate");
 const Data = ps.Data;
 
 pub const FindWord = union(enum) {
-    to_check_word: Data(.current, void, CheckWord),
-    exit: Data(.current, void, ps.Exit),
-    no_transition: Data(.current, void, FindWord),
+    to_check_word: Data(.current, CheckWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, FindWord),
 
     pub const info = caps_fsm_info("FindWord");
 
@@ -25,10 +25,10 @@ pub const FindWord = union(enum) {
 };
 
 pub const CheckWord = union(enum) {
-    to_find_word: Data(.current, void, FindWord),
-    to_capitalize: Data(.next, void, Capitalize),
-    exit: Data(.current, void, ps.Exit),
-    no_transition: Data(.current, void, CheckWord),
+    to_find_word: Data(.current, FindWord),
+    to_capitalize: Data(.next, Capitalize),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, CheckWord),
 
     pub const info = caps_fsm_info("CheckWord");
 
@@ -52,9 +52,9 @@ pub const CheckWord = union(enum) {
 };
 
 pub const Capitalize = union(enum) {
-    to_find_word: Data(.current, void, FindWord),
-    exit: Data(.current, void, ps.Exit),
-    no_transition: Data(.current, void, Capitalize),
+    to_find_word: Data(.current, FindWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, Capitalize),
 
     pub const info = caps_fsm_info("Capialize");
 

@@ -22,12 +22,12 @@ pub fn example_info(name: []const u8) ps.StateInfo("Example", Context) {
 
 pub fn Dummy(comptime Next: type, comptime int: comptime_int) type {
     return union(enum) {
-        to_next0: Data(.current, void, Next),
-        to_next1: Data(.current, void, Next),
-        to_next2: Data(.current, void, Next),
-        to_next3: Data(.current, void, Next),
-        to_next4: Data(.current, void, Next),
-        to_next5: Data(.current, void, Next),
+        to_next0: Data(.current, Next),
+        to_next1: Data(.current, Next),
+        to_next2: Data(.current, Next),
+        to_next3: Data(.current, Next),
+        to_next4: Data(.current, Next),
+        to_next5: Data(.current, Next),
 
         pub const int_decl = int;
 
@@ -52,26 +52,26 @@ pub fn Nested(comptime int: comptime_int) type {
 }
 
 pub const EnterState = union(enum) {
-    to_1: Data(.current, void, Nested(1)),
-    to_2: Data(.current, void, Nested(2)),
-    to_3: Data(.current, void, Nested(3)),
-    to_4: Data(.current, void, Nested(4)),
-    to_5: Data(.current, void, Nested(5)),
-    to_6: Data(.current, void, Nested(6)),
-    to_7: Data(.current, void, Nested(7)),
-    to_8: Data(.current, void, Nested(8)),
-    to_9: Data(.current, void, Nested(9)),
-    to_10: Data(.current, void, Nested(10)),
-    to_11: Data(.current, void, Nested(11)),
-    to_12: Data(.current, void, Nested(12)),
-    to_13: Data(.current, void, Nested(13)),
-    to_14: Data(.current, void, Nested(14)),
-    to_15: Data(.current, void, Nested(15)),
-    to_16: Data(.current, void, Nested(16)),
-    to_17: Data(.current, void, Nested(17)),
-    to_18: Data(.current, void, Nested(18)),
-    to_19: Data(.current, void, Nested(19)),
-    to_20: Data(.current, void, Nested(20)),
+    to_1: Data(.current, Nested(1)),
+    to_2: Data(.current, Nested(2)),
+    to_3: Data(.current, Nested(3)),
+    to_4: Data(.current, Nested(4)),
+    to_5: Data(.current, Nested(5)),
+    to_6: Data(.current, Nested(6)),
+    to_7: Data(.current, Nested(7)),
+    to_8: Data(.current, Nested(8)),
+    to_9: Data(.current, Nested(9)),
+    to_10: Data(.current, Nested(10)),
+    to_11: Data(.current, Nested(11)),
+    to_12: Data(.current, Nested(12)),
+    to_13: Data(.current, Nested(13)),
+    to_14: Data(.current, Nested(14)),
+    to_15: Data(.current, Nested(15)),
+    to_16: Data(.current, Nested(16)),
+    to_17: Data(.current, Nested(17)),
+    to_18: Data(.current, Nested(18)),
+    to_19: Data(.current, Nested(19)),
+    to_20: Data(.current, Nested(20)),
 
     pub const info = example_info("EnterState");
 
