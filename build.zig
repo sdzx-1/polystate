@@ -175,6 +175,7 @@ pub fn addGraphFile(
     const opt_exe = b.addExecutable(.{
         .name = gen_exe_name,
         .root_module = opt_mod,
+        .use_llvm = true, //https://codeberg.org/ziglang/zig/issues/31272
     });
     const run = b.addRunArtifact(opt_exe);
     return run.captureStdOut();
