@@ -1,10 +1,13 @@
 const std = @import("std");
 const ps = @import("polystate");
+const Data = ps.Data;
 
 pub const FindWord = union(enum) {
-    to_check_word: CapsFsm(CheckWord),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(FindWord),
+    to_check_word: Data(.current, CheckWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, FindWord),
+
+    pub const info = caps_fsm_info("FindWord");
 
     pub fn handler(ctx: *Context) FindWord {
         switch (ctx.string[0]) {
@@ -22,10 +25,12 @@ pub const FindWord = union(enum) {
 };
 
 pub const CheckWord = union(enum) {
-    to_find_word: CapsFsm(FindWord),
-    to_capitalize: CapsFsm(Capitalize),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(CheckWord),
+    to_find_word: Data(.current, FindWord),
+    to_capitalize: Data(.current, Capitalize),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, CheckWord),
+
+    pub const info = caps_fsm_info("CheckWord");
 
     pub fn handler(ctx: *Context) CheckWord {
         switch (ctx.string[0]) {
@@ -47,9 +52,11 @@ pub const CheckWord = union(enum) {
 };
 
 pub const Capitalize = union(enum) {
-    to_find_word: CapsFsm(FindWord),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(Capitalize),
+    to_find_word: Data(.current, FindWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, Capitalize),
+
+    pub const info = caps_fsm_info("Capialize");
 
     pub fn handler(ctx: *Context) Capitalize {
         switch (ctx.string[0]) {
@@ -79,14 +86,14 @@ pub const Context = struct {
     }
 };
 
-pub fn CapsFsm(comptime State: type) type {
-    return ps.FSM("Underscore Capitalizer", .not_suspendable, null, {}, State);
+fn caps_fsm_info(name: []const u8) ps.StateInfo("Underscore Capitalizer", Context) {
+    return .{ .name = name };
 }
 
-pub const EnterFsmState = CapsFsm(FindWord);
+pub const EnterFsmState = FindWord;
 
 pub fn main() void {
-    const Runner = ps.Runner(true, EnterFsmState);
+    const Runner = ps.Runner(EnterFsmState);
 
     var string_backing =
         \\capitalize_me 
@@ -98,11 +105,11 @@ pub fn main() void {
 
     var ctx: Context = .init(string);
 
-    const starting_state_id = Runner.idFromState(EnterFsmState.State);
+    const starting_state_id = Runner.idFromState(EnterFsmState);
 
     std.debug.print("Without caps:\n{s}\n\n", .{string});
 
-    Runner.runHandler(starting_state_id, &ctx);
+    Runner.runHandler(.not_suspendable, false, null, starting_state_id, &ctx);
 
     std.debug.print("With caps:\n{s}\n", .{string});
 }

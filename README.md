@@ -43,13 +43,17 @@ Here's our state machine implemented with Polystate:
 <summary><code>main.zig</code></summary>
 
 ```zig
+
 const std = @import("std");
 const ps = @import("polystate");
+const Data = ps.Data;
 
 pub const FindWord = union(enum) {
-    to_check_word: CapsFsm(CheckWord),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(FindWord),
+    to_check_word: Data(.current, CheckWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, FindWord),
+
+    pub const info = caps_fsm_info("FindWord");
 
     pub fn handler(ctx: *Context) FindWord {
         switch (ctx.string[0]) {
@@ -67,10 +71,12 @@ pub const FindWord = union(enum) {
 };
 
 pub const CheckWord = union(enum) {
-    to_find_word: CapsFsm(FindWord),
-    to_capitalize: CapsFsm(Capitalize),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(CheckWord),
+    to_find_word: Data(.current, FindWord),
+    to_capitalize: Data(.current, Capitalize),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, CheckWord),
+
+    pub const info = caps_fsm_info("CheckWord");
 
     pub fn handler(ctx: *Context) CheckWord {
         switch (ctx.string[0]) {
@@ -92,9 +98,11 @@ pub const CheckWord = union(enum) {
 };
 
 pub const Capitalize = union(enum) {
-    to_find_word: CapsFsm(FindWord),
-    exit: CapsFsm(ps.Exit),
-    no_transition: CapsFsm(Capitalize),
+    to_find_word: Data(.current, FindWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, Capitalize),
+
+    pub const info = caps_fsm_info("Capialize");
 
     pub fn handler(ctx: *Context) Capitalize {
         switch (ctx.string[0]) {
@@ -124,14 +132,14 @@ pub const Context = struct {
     }
 };
 
-pub fn CapsFsm(comptime State: type) type {
-    return ps.FSM("Underscore Capitalizer", .not_suspendable, null, {}, State);
+fn caps_fsm_info(name: []const u8) ps.StateInfo("Underscore Capitalizer", Context) {
+    return .{ .name = name };
 }
 
-pub fn main() void {
-    const StartingFsmState = CapsFsm(FindWord);
+pub const EnterFsmState = FindWord;
 
-    const Runner = ps.Runner(true, StartingFsmState);
+pub fn main() void {
+    const Runner = ps.Runner(EnterFsmState);
 
     var string_backing =
         \\capitalize_me 
@@ -143,11 +151,11 @@ pub fn main() void {
 
     var ctx: Context = .init(string);
 
-    const starting_state_id = Runner.idFromState(StartingFsmState.State);
+    const starting_state_id = Runner.idFromState(EnterFsmState);
 
     std.debug.print("Without caps:\n{s}\n\n", .{string});
 
-    Runner.runHandler(starting_state_id, &ctx);
+    Runner.runHandler(.not_suspendable, false, null, starting_state_id, &ctx);
 
     std.debug.print("With caps:\n{s}\n", .{string});
 }
@@ -199,11 +207,14 @@ This is our capitalization state machine, updated such that every time a word is
 ```zig
 const std = @import("std");
 const ps = @import("polystate");
+const Data = ps.Data;
 
 pub const FindWord = union(enum) {
-    to_check_word: CapsFsm(.current, CheckWord),
-    exit: CapsFsm(.current, ps.Exit),
-    no_transition: CapsFsm(.current, FindWord),
+    to_check_word: Data(.current, CheckWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, FindWord),
+
+    pub const info = caps_fsm_info("FindWord");
 
     pub fn handler(ctx: *Context) FindWord {
         switch (ctx.string[0]) {
@@ -221,10 +232,12 @@ pub const FindWord = union(enum) {
 };
 
 pub const CheckWord = union(enum) {
-    to_find_word: CapsFsm(.current, FindWord),
-    to_capitalize: CapsFsm(.next, Capitalize),
-    exit: CapsFsm(.current, ps.Exit),
-    no_transition: CapsFsm(.current, CheckWord),
+    to_find_word: Data(.current, FindWord),
+    to_capitalize: Data(.next, Capitalize),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, CheckWord),
+
+    pub const info = caps_fsm_info("CheckWord");
 
     pub fn handler(ctx: *Context) CheckWord {
         switch (ctx.string[0]) {
@@ -246,9 +259,11 @@ pub const CheckWord = union(enum) {
 };
 
 pub const Capitalize = union(enum) {
-    to_find_word: CapsFsm(.current, FindWord),
-    exit: CapsFsm(.current, ps.Exit),
-    no_transition: CapsFsm(.current, Capitalize),
+    to_find_word: Data(.current, FindWord),
+    exit: Data(.current, ps.Exit),
+    no_transition: Data(.current, Capitalize),
+
+    pub const info = caps_fsm_info("Capialize");
 
     pub fn handler(ctx: *Context) Capitalize {
         switch (ctx.string[0]) {
@@ -278,14 +293,14 @@ pub const Context = struct {
     }
 };
 
-pub fn CapsFsm(comptime method: ps.Method, comptime State: type) type {
-    return ps.FSM("Underscore Capitalizer", .suspendable, null, method, State);
+fn caps_fsm_info(name: []const u8) ps.StateInfo("Underscore Capitalizer", Context) {
+    return .{ .name = name };
 }
 
-pub fn main() void {
-    const StartingFsmState = CapsFsm(.current, FindWord);
+pub const EnterFsmState = FindWord;
 
-    const Runner = ps.Runner(true, StartingFsmState);
+pub fn main() void {
+    const Runner = ps.Runner(EnterFsmState);
 
     var string_backing =
         \\capitalize_me 
@@ -299,9 +314,9 @@ pub fn main() void {
 
     std.debug.print("Without caps:\n{s}\n\n", .{string});
 
-    var state_id = Runner.idFromState(StartingFsmState.State);
+    var state_id = Runner.idFromState(EnterFsmState);
 
-    while (Runner.runHandler(state_id, &ctx)) |new_state_id| {
+    while (Runner.runHandler(.suspendable, false, null, state_id, &ctx)) |new_state_id| {
         state_id = new_state_id;
 
         var word_len: usize = 0;
@@ -371,11 +386,16 @@ Here's the implementation:
 <summary><code>main.zig</code></summary>
 
 ```zig
+
 const std = @import("std");
 const ps = @import("polystate");
+const Data = ps.Data;
+
+fn word_processor_info(name: []const u8) ps.StateInfo("Word Processor", Context) {
+    return .{ .name = name };
+}
 
 pub fn Words(
-    comptime Fsm: fn (State: type) type,
     comptime ParentContext: type,
     comptime ctx_field: std.meta.FieldEnum(ParentContext),
 ) type {
@@ -385,7 +405,9 @@ pub fn Words(
             comptime NoWordsLeft: type,
         ) type {
             return union(enum) {
-                to_inner: Fsm(IterateWordsInner(WordOperation(@This()), NoWordsLeft)),
+                to_inner: Data(.current, IterateWordsInner(WordOperation(@This()), NoWordsLeft)),
+
+                pub const info = word_processor_info("IterateWords");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -400,8 +422,10 @@ pub fn Words(
             comptime NoWordsLeft: type,
         ) type {
             return union(enum) {
-                to_find_word: Fsm(FindWord(FoundWord)),
-                to_no_words_left: Fsm(NoWordsLeft),
+                to_find_word: Data(.current, FindWord(FoundWord)),
+                to_no_words_left: Data(.current, NoWordsLeft),
+
+                pub const info = word_processor_info("IterateWordsInner");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -416,8 +440,10 @@ pub fn Words(
 
         pub fn FindWord(comptime Next: type) type {
             return union(enum) {
-                to_find_word_end: Fsm(FindWordEnd(Next)),
-                no_transition: Fsm(@This()),
+                to_find_word_end: Data(.current, FindWordEnd(Next)),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("FindWord");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -443,8 +469,10 @@ pub fn Words(
 
         pub fn FindWordEnd(comptime Next: type) type {
             return union(enum) {
-                to_next: Fsm(Next),
-                no_transition: Fsm(@This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("FindWordEnd");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -467,7 +495,9 @@ pub fn Words(
             mutateChar: fn (char: u8) u8,
         ) type {
             return union(enum) {
-                to_inner: Fsm(CharMutationInner(Next, mutateChar)),
+                to_inner: Data(.current, CharMutationInner(Next, mutateChar)),
+
+                pub const info = word_processor_info("CharMutation");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -482,8 +512,10 @@ pub fn Words(
             mutateChar: fn (char: u8) u8,
         ) type {
             return union(enum) {
-                to_next: Fsm(Next),
-                no_transition: Fsm(@This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("CharMutationInner");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -500,7 +532,9 @@ pub fn Words(
 
         pub fn Reverse(comptime Next: type) type {
             return union(enum) {
-                to_inner: Fsm(ReverseInner(Next)),
+                to_inner: Data(.current, ReverseInner(Next)),
+
+                pub const info = word_processor_info("Reverse");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -513,8 +547,10 @@ pub fn Words(
 
         pub fn ReverseInner(comptime Next: type) type {
             return union(enum) {
-                to_next: Fsm(Next),
-                no_transition: Fsm(@This()),
+                to_next: Data(.current, Next),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("ReverseInner");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -538,7 +574,9 @@ pub fn Words(
             comptime predicate: fn (char: u8) bool,
         ) type {
             return union(enum) {
-                to_inner: Fsm(CharFilterInner(Pass, Fail, predicate)),
+                to_inner: Data(.current, CharFilterInner(Pass, Fail, predicate)),
+
+                pub const info = word_processor_info("CharFilter");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -554,9 +592,11 @@ pub fn Words(
             comptime predicate: fn (char: u8) bool,
         ) type {
             return union(enum) {
-                to_pass: Fsm(Pass),
-                to_fail: Fsm(Fail),
-                no_transition: Fsm(@This()),
+                to_pass: Data(.current, Pass),
+                to_fail: Data(.current, Fail),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("CharFilterInner");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -578,7 +618,9 @@ pub fn Words(
             comptime Fail: type,
         ) type {
             return union(enum) {
-                to_inner: Fsm(PalindromeFilterInner(Pass, Fail)),
+                to_inner: Data(.current, PalindromeFilterInner(Pass, Fail)),
+
+                pub const info = word_processor_info("PalindromeFilter");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -594,9 +636,11 @@ pub fn Words(
             comptime Fail: type,
         ) type {
             return union(enum) {
-                to_pass: Fsm(Pass),
-                to_fail: Fsm(Fail),
-                no_transition: Fsm(@This()),
+                to_pass: Data(.current, Pass),
+                to_fail: Data(.current, Fail),
+                no_transition: Data(.current, @This()),
+
+                pub const info = word_processor_info("PalindromeFilterInner");
 
                 pub fn handler(parent_ctx: *ParentContext) @This() {
                     const ctx = ctxFromParent(parent_ctx);
@@ -649,12 +693,8 @@ pub const Context = struct {
     }
 };
 
-pub fn CapsFsm(comptime State: type) type {
-    return ps.FSM("Word Processor", .not_suspendable, null, {}, State);
-}
-
 const string1_states = struct {
-    const W = Words(CapsFsm, Context, .string1_ctx);
+    const W = Words(Context, .string1_ctx);
 
     fn isUnderscore(char: u8) bool {
         return char == '_';
@@ -695,7 +735,7 @@ const string1_states = struct {
 };
 
 const string2_states = struct {
-    const W = Words(CapsFsm, Context, .string2_ctx);
+    const W = Words(Context, .string2_ctx);
 
     fn isVowel(char: u8) bool {
         return switch (char) {
@@ -723,11 +763,10 @@ const string2_states = struct {
     }
 };
 
-pub const EnterFsmState = CapsFsm(
+pub const EnterFsmState =
     string1_states.CapitalizeUnderscoreOrPalindromeWords(
         string2_states.ReverseVowelWords(ps.Exit),
-    ),
-);
+    );
 
 pub fn main() !void {
     const Runner = ps.Runner(true, EnterFsmState);
@@ -748,19 +787,18 @@ pub fn main() !void {
 
     var ctx: Context = .init(&string1_backing, &string2_backing);
 
-    const starting_state_id = Runner.idFromState(EnterFsmState.State);
+    const starting_state_id = Runner.idFromState(EnterFsmState);
 
     std.debug.print("Before processing:\n", .{});
     std.debug.print("String 1: {s}\n", .{string1_backing});
     std.debug.print("String 2: {s}\n\n", .{string2_backing});
 
-    Runner.runHandler(starting_state_id, &ctx);
+    Runner.runHandler(.not_suspendable, false, null, starting_state_id, &ctx);
 
     std.debug.print("After processing:\n", .{});
     std.debug.print("String 1: {s}\n", .{string1_backing});
     std.debug.print("String 2: {s}\n", .{string2_backing});
 }
-
 ```
 
 </details>
