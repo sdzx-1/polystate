@@ -51,19 +51,20 @@ fn addExampleGraphsStep(
     const graph_step = b.step("example-graphs", "Generate SVG graphs for the README examples");
 
     const examples_dir_name = "examples";
+    const io = b.graph.io;
 
-    const graph_install_path = b.build_root.handle.realpathAlloc(b.allocator, examples_dir_name) catch |err| std.debug.panic("{}", .{err});
+    const graph_install_path = b.build_root.handle.realPathFileAlloc(io, examples_dir_name, b.allocator) catch |err| std.debug.panic("{}", .{err});
 
-    const graph_install_path_relative = std.fs.path.relative(b.allocator, b.install_path, graph_install_path) catch |err| std.debug.panic("{}", .{err});
+    const graph_install_path_relative = std.fs.path.relative(b.allocator, "", &b.graph.environ_map, b.install_path, graph_install_path) catch |err| std.debug.panic("{}", .{err});
 
     const graph_install_dir: std.Build.InstallDir = .{ .custom = graph_install_path_relative };
 
-    var examples_dir = b.build_root.handle.openDir(examples_dir_name, .{ .iterate = true }) catch |err| std.debug.panic("{}", .{err});
-    defer examples_dir.close();
+    var examples_dir = b.build_root.handle.openDir(io, examples_dir_name, .{ .iterate = true }) catch |err| std.debug.panic("{}", .{err});
+    defer examples_dir.close(io);
 
     var iterator = examples_dir.iterate();
 
-    while (iterator.next() catch |err| std.debug.panic("{}", .{err})) |entry| {
+    while (iterator.next(io) catch |err| std.debug.panic("{}", .{err})) |entry| {
         if (entry.kind == .directory) {
             const example_name = b.allocator.dupe(u8, entry.name) catch @panic("OOM");
             const mod = b.addModule(
@@ -103,7 +104,7 @@ fn addGraphToStep(
 
     dot_cmd.addFileArg(graph_file);
 
-    const graph_svg = dot_cmd.captureStdOut();
+    const graph_svg = dot_cmd.captureStdOut(.{});
 
     const install_graph_svg = b.addInstallFileWithDir(graph_svg, install_dir, b.pathJoin(&.{ dst_rel_path, "graph.svg" }));
 
@@ -124,36 +125,22 @@ pub fn addGraphFile(
     polystate: *std.Build.Module,
     target: std.Build.ResolvedTarget,
 ) std.Build.LazyPath {
-    const options = b.addOptions();
-
-    const old_io = comptime builtin.zig_version.order(.{ .major = 0, .minor = 15, .patch = 0 }) == .lt;
-
-    const writer = if (old_io)
-        options.contents.writer()
-    else
-        options.contents.writer(b.allocator);
-
-    const stdio_writer_setup = if (old_io)
-        \\const writer = std.io.getStdOut().writer();
-    else
-        \\var stdout_buffer: [1024]u8 = undefined;
-        \\var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-        \\const writer = &stdout_writer.interface;
-        \\defer writer.flush() catch @panic("Failed to flush");
-    ;
-
+    var allocating: std.Io.Writer.Allocating = .init(b.graph.arena);
+    const writer = &allocating.writer;
     writer.print(
         \\const std = @import("std");
         \\const ps = @import("polystate");
         \\const Target = @import("{s}");
-        \\pub fn main() !void {{
-        \\  var gpa_instance = std.heap.GeneralPurposeAllocator(.{{}}){{}};
+        \\pub fn main(init: std.process.Init) !void {{
+        \\  const io = init.io;
+        \\  var gpa_instance = std.heap.DebugAllocator(.{{}}){{}};
         \\  const gpa = gpa_instance.allocator();
         \\  var graph = try ps.Graph.initWithFsm(gpa, Target.EnterFsmState);
         \\  defer graph.deinit();
-        \\
-    ++ stdio_writer_setup ++
-        \\
+        \\  var stdout_buffer: [1024]u8 = undefined;
+        \\  var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buffer);
+        \\  const writer = &stdout_writer.interface;
+        \\  defer writer.flush() catch @panic("Failed to flush");
         \\  try graph.{s}(writer);
         \\}}
     , .{ module_name, switch (graph_mode) {
@@ -161,6 +148,9 @@ pub fn addGraphFile(
         .mermaid => "generateMermaid",
         .json => "generateJson",
     } }) catch @panic("OOM");
+
+    const options = b.addOptions();
+    options.contents = writer.toArrayList();
 
     const opt_mod = b.createModule(.{
         .root_source_file = options.getOutput(),
@@ -175,10 +165,9 @@ pub fn addGraphFile(
     const opt_exe = b.addExecutable(.{
         .name = gen_exe_name,
         .root_module = opt_mod,
-        .use_llvm = true, //https://codeberg.org/ziglang/zig/issues/31272
     });
     const run = b.addRunArtifact(opt_exe);
-    return run.captureStdOut();
+    return run.captureStdOut(.{});
 }
 
 pub fn addInstallGraphFile(

@@ -57,29 +57,32 @@ pub const StateMap = struct {
 
         comptime {
             const result = reachableStates(State);
+            const TagInt = std.math.IntFittingRange(0, result.states.len - 1);
             return .{
                 .states = result.states,
                 .state_machine_names = result.state_machine_names,
-                .StateId = @Type(.{
-                    .@"enum" = .{
-                        .tag_type = std.math.IntFittingRange(0, result.states.len - 1),
-                        .fields = inner: {
-                            var fields: [result.states.len]std.builtin.Type.EnumField = undefined;
+                .StateId = @Enum(
+                    TagInt,
+                    .exhaustive,
+                    field_names: {
+                        var names: [result.states.len][]const u8 = undefined;
 
-                            for (&fields, result.states, 0..) |*field, State_, state_int| {
-                                field.* = .{
-                                    .name = @typeName(State_),
-                                    .value = state_int,
-                                };
-                            }
+                        for (result.states, 0..) |State_, i| {
+                            names[i] = @typeName(State_);
+                        }
 
-                            const fields_const = fields;
-                            break :inner &fields_const;
-                        },
-                        .decls = &.{},
-                        .is_exhaustive = true,
+                        break :field_names &names;
                     },
-                }),
+
+                    field_values: {
+                        var values: [result.states.len]TagInt = undefined;
+
+                        for (result.states, 0..) |_, i| {
+                            values[i] = i;
+                        }
+                        break :field_values &values;
+                    },
+                ),
             };
         }
     }
