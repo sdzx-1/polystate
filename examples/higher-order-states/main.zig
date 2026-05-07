@@ -380,7 +380,7 @@ pub const EnterFsmState =
     );
 
 pub fn main() !void {
-    const Runner = ps.Runner(true, EnterFsmState);
+    const Runner = ps.Runner(EnterFsmState);
 
     var string1_backing =
         \\capitalize_me 
